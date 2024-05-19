@@ -51,6 +51,56 @@ fn generate_beb() {
     }
 }
 
+// Modified binary exponential back-off: The next timer starts from
+// the end of the current window, not immediately after a failed
+// retry. Means a client should always make n retry attempts before
+// the 2^n-1 th time slot.
+fn generate_mbeb() {
+    const RETRIES: usize = 5;
+    const LEN: usize = (1 << (RETRIES + 1));
+
+    // Start off with 0th retry all in a single timeslot.
+    let mut density = vec![0.0; LEN];
+    density[0] = 1.0;
+    let mut v = Vec::new();
+    v.push(density);
+
+    // Generate densities over the retry iterations.
+    for retry in 1..=RETRIES {
+        let prev = v.last().unwrap();
+        let mut density = vec![0.0; LEN];
+
+        // Number of slots over which the retries will be spread out.
+        let smear = 1 << retry;
+        let fract = (smear as f64).recip();
+
+	// All retries smeared from the end of the time window.
+	let idx = (1 << retry) - 1;
+        for tgt in density[idx..][..smear].iter_mut() {
+            *tgt += fract;
+        }
+
+        v.push(density);
+    };
+
+    // Print out in a nice CSV format.
+    print!("Timeslot");
+    for i in 1..=RETRIES {
+        print!(",Retry {}", i);
+    }
+    println!(",Total");
+
+    for t in 0..LEN {
+        print!("{}", t);
+        let mut sum = 0.0;
+        for retry in 1..=RETRIES {
+            print!(",{:.5}", v[retry][t]);
+            sum += v[retry][t];
+        }
+        println!(",{:.5}", sum);
+    }
+}
+
 // Implement exponential back-off with jitter, as seen in
 // com.google.api.client.util.ExponentialBackOff.java.
 fn generate_ebj() {
@@ -122,6 +172,7 @@ fn generate_ebj() {
 }
 
 fn main() {
-    generate_beb();
+    // generate_beb();
+    generate_mbeb();
     // generate_ebj();
 }
