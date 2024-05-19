@@ -5,7 +5,7 @@ use rand::Rng;
 // (https://en.wikipedia.org/wiki/Exponential_backoff#Example).)
 fn generate_beb() {
     const RETRIES: usize = 5;
-    const LEN: usize = 1 << RETRIES;
+    const LEN: usize = 1 << (RETRIES + 1);
 
     // Start off with 0th retry all in a single timeslot.
     let mut density = vec![0.0; LEN];
@@ -14,7 +14,7 @@ fn generate_beb() {
     v.push(density);
 
     // Generate densities over the retry iterations.
-    for retry in 1..RETRIES {
+    for retry in 1..=RETRIES {
         let prev = v.last().unwrap();
         let mut density = vec![0.0; LEN];
 
@@ -35,7 +35,7 @@ fn generate_beb() {
 
     // Print out in a nice CSV format.
     print!("Timeslot");
-    for i in 0..RETRIES {
+    for i in 1..=RETRIES {
         print!(",Retry {}", i);
     }
     println!(",Total");
@@ -43,7 +43,7 @@ fn generate_beb() {
     for t in 0..LEN {
         print!("{}", t);
         let mut sum = 0.0;
-        for retry in 0..RETRIES {
+        for retry in 1..=RETRIES {
             print!(",{:.5}", v[retry][t]);
             sum += v[retry][t];
         }
@@ -104,8 +104,8 @@ fn generate_ebj() {
     }
 
     // Print out in a nice CSV format.
-    print!("Timeslot");
-    for i in 0..RETRIES {
+    print!("Time");
+    for i in 1..=RETRIES {
         print!(",Retry {}", i);
     }
     println!(",Total");
@@ -122,6 +122,6 @@ fn generate_ebj() {
 }
 
 fn main() {
-    //  generate_beb();
-    generate_ebj();
+    generate_beb();
+    // generate_ebj();
 }
