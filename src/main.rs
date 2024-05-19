@@ -1,10 +1,11 @@
 use rand;
 use rand::Rng;
 
+const RETRIES: usize = 5;
+
 // Binary exponential back-off, as used in Ethernet
 // (https://en.wikipedia.org/wiki/Exponential_backoff#Example).)
-fn generate_beb() {
-    const RETRIES: usize = 5;
+fn generate_beb() -> Vec<Vec<f64>> {
     const LEN: usize = 1 << (RETRIES + 1);
 
     // Start off with 0th retry all in a single timeslot.
@@ -33,6 +34,43 @@ fn generate_beb() {
         v.push(density);
     }
 
+    v
+}
+
+// Modified binary exponential back-off: The next timer starts from
+// the end of the current window, not immediately after a failed
+// retry. Means a client should always make n retry attempts before
+// the 2^n-1 th time slot.
+fn generate_mbeb() -> Vec<Vec<f64>> {
+    const LEN: usize = 1 << (RETRIES + 1);
+
+    // Start off with 0th retry all in a single timeslot.
+    let mut density = vec![0.0; LEN];
+    density[0] = 1.0;
+    let mut v = Vec::new();
+    v.push(density);
+
+    // Generate densities over the retry iterations.
+    for retry in 1..=RETRIES {
+        let mut density = vec![0.0; LEN];
+
+        // Number of slots over which the retries will be spread out.
+        let smear = 1 << retry;
+        let fract = (smear as f64).recip();
+
+        // All retries smeared from the end of the time window.
+        let idx = (1 << retry) - 1;
+        for tgt in density[idx..][..smear].iter_mut() {
+            *tgt += fract;
+        }
+
+        v.push(density);
+    }
+
+    v
+}
+
+fn print_beb(v: &[Vec<f64>]) {
     // Print out in a nice CSV format.
     print!("Timeslot");
     for i in 1..=RETRIES {
@@ -40,7 +78,7 @@ fn generate_beb() {
     }
     println!(",Total");
 
-    for t in 0..LEN {
+    for t in 0..v[0].len() {
         print!("{}", t);
         let mut sum = 0.0;
         for retry in 1..=RETRIES {
@@ -51,53 +89,23 @@ fn generate_beb() {
     }
 }
 
-// Modified binary exponential back-off: The next timer starts from
-// the end of the current window, not immediately after a failed
-// retry. Means a client should always make n retry attempts before
-// the 2^n-1 th time slot.
-fn generate_mbeb() {
-    const RETRIES: usize = 5;
-    const LEN: usize = (1 << (RETRIES + 1));
-
-    // Start off with 0th retry all in a single timeslot.
-    let mut density = vec![0.0; LEN];
-    density[0] = 1.0;
-    let mut v = Vec::new();
-    v.push(density);
-
-    // Generate densities over the retry iterations.
-    for retry in 1..=RETRIES {
-        let prev = v.last().unwrap();
-        let mut density = vec![0.0; LEN];
-
-        // Number of slots over which the retries will be spread out.
-        let smear = 1 << retry;
-        let fract = (smear as f64).recip();
-
-	// All retries smeared from the end of the time window.
-	let idx = (1 << retry) - 1;
-        for tgt in density[idx..][..smear].iter_mut() {
-            *tgt += fract;
+fn print_beb_comparison(beb: &[Vec<f64>], mbeb: &[Vec<f64>]) {
+    fn sum_transpose(v: &[Vec<f64>]) -> Vec<f64> {
+        let mut res = Vec::new();
+        for row in 0..v[0].len() {
+            res.push(v.iter().map(|col| col[row]).sum());
         }
+        res
+    }
 
-        v.push(density);
-    };
+    let beb_sums = sum_transpose(beb);
+    let mbeb_sums = sum_transpose(mbeb);
 
     // Print out in a nice CSV format.
-    print!("Timeslot");
-    for i in 1..=RETRIES {
-        print!(",Retry {}", i);
-    }
-    println!(",Total");
+    println!("Timeslot,BEB,MBEB");
 
-    for t in 0..LEN {
-        print!("{}", t);
-        let mut sum = 0.0;
-        for retry in 1..=RETRIES {
-            print!(",{:.5}", v[retry][t]);
-            sum += v[retry][t];
-        }
-        println!(",{:.5}", sum);
+    for (idx, (beb_sum, mbeb_sum)) in beb_sums.iter().zip(mbeb_sums.iter()).enumerate() {
+        println!("{},{:.5},{:.5}", idx, beb_sum, mbeb_sum);
     }
 }
 
@@ -172,7 +180,10 @@ fn generate_ebj() {
 }
 
 fn main() {
-    // generate_beb();
-    generate_mbeb();
+    let beb_histogram = generate_beb();
+    // print_beb(&beb_histogram);
+    let mbeb_histogram = generate_mbeb();
+    // print_beb(&mbeb_histogram);
+    print_beb_comparison(&beb_histogram, &mbeb_histogram);
     // generate_ebj();
 }
